@@ -1,3 +1,5 @@
+<!-- public/dashboard.html -->
+
 <!DOCTYPE html>
 <html>
 
@@ -13,7 +15,13 @@
     <div id="userInfo"></div>
     <div>
         <h3>Cadastrar Dispositivo</h3>
-        <input type="text" id="imeiField" placeholder="IMEI">
+        <input type="text" id="imeiField" placeholder="IMEI"><br>
+        <input type="text" id="nameField" placeholder="Nome"><br>
+        <input type="text" id="plateField" placeholder="Placa"><br>
+        <input type="text" id="brandField" placeholder="Marca"><br>
+        <input type="text" id="modelField" placeholder="Modelo"><br>
+        <input type="text" id="yearField" placeholder="Ano"><br>
+        <input type="text" id="colorField" placeholder="Cor"><br>
         <button onclick="registerDevice()">Salvar</button>
     </div>
     <div>
@@ -23,8 +31,7 @@
         <div id="positions"></div>
     </div>
     <div id="map" style="width:600px;height:400px"></div>
-    <script async
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCAwvAt4l0Pkb1c52FLUE-ttVxm4YZ9J8M&callback=initMap"></script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_KEY&callback=initMap"></script>
 </body>
 
 </html>

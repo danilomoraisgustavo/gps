@@ -1,3 +1,5 @@
+// public/script.js
+
 let map
 let marker
 async function initMap() {
@@ -16,14 +18,24 @@ async function loadDevices() {
     ds.forEach(d => {
         let o = document.createElement('option')
         o.value = d.id
-        o.textContent = 'ID:' + d.id + ' IMEI:' + d.imei
+        o.textContent = `ID:${d.id} IMEI:${d.imei} ${d.name || ''} ${d.plate || ''}`
         sel.appendChild(o)
     })
 }
 async function registerDevice() {
     let imei = document.getElementById('imeiField').value
+    let name = document.getElementById('nameField').value
+    let plate = document.getElementById('plateField').value
+    let brand = document.getElementById('brandField').value
+    let model = document.getElementById('modelField').value
+    let year = document.getElementById('yearField').value
+    let color = document.getElementById('colorField').value
     if (!imei) return
-    await fetch('/devices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ imei }) })
+    await fetch('/devices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imei, name, plate, brand, model, year, color })
+    })
     loadDevices()
 }
 async function loadPositions() {
