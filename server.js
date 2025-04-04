@@ -90,7 +90,7 @@ app.get('/positions', (req, res) => {
     })
 })
 
-app.listen(3000, () => { })
+app.listen(4000, () => { })
 
 const parsePacket = (data) => {
     if (data.length < 10) return null
@@ -140,4 +140,4 @@ const tcpServer = net.createServer((socket) => {
     socket.on('error', () => { })
 })
 
-tcpServer.listen(5001, () => { })
+tcpServer.listen(5000, () => { })
