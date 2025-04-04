@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Dashboard</title>
+    <script src="script.js"></script>
+</head>
+
+<body>
+    <h1>Dashboard</h1>
+    <div><a href="/logout">Logout</a></div>
+    <div id="userInfo"></div>
+    <div>
+        <h3>Cadastrar Dispositivo</h3>
+        <input type="text" id="imeiField" placeholder="IMEI">
+        <button onclick="registerDevice()">Salvar</button>
+    </div>
+    <div>
+        <h3>Meus Dispositivos</h3>
+        <select id="deviceSelect"></select>
+        <button onclick="loadPositions()">Carregar</button>
+        <div id="positions"></div>
+    </div>
+    <div id="map" style="width:600px;height:400px"></div>
+    <script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCAwvAt4l0Pkb1c52FLUE-ttVxm4YZ9J8M&callback=initMap"></script>
+</body>
+
+</html>

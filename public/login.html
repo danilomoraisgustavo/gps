@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Login</title>
+</head>
+
+<body>
+    <h1>Login</h1>
+    <form id="loginForm">
+        <input type="text" id="username" placeholder="Username"><br>
+        <input type="password" id="password" placeholder="Password"><br>
+        <button>Entrar</button>
+    </form>
+    <div id="msg"></div>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault()
+            let u = document.getElementById('username').value
+            let p = document.getElementById('password').value
+            let r = await fetch('/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: u, password: p }) })
+            let t = await r.text()
+            if (t === 'ok') { location = '/dashboard.html' } else { document.getElementById('msg').innerText = 'Falha' }
+        })
+    </script>
+</body>
+
+</html>
