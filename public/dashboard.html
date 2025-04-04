@@ -1,38 +1,192 @@
-<!-- public/dashboard.html -->
-
 <!DOCTYPE html>
-<html>
+<html lang="pt">
 
 <head>
     <meta charset="utf-8">
-    <title>Dashboard</title>
-    <script src="script.js"></script>
+    <title>PyDenTrack – Rastreamento</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="shortcut icon" href="images/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="css/dark-green.css">
+    <style>
+        body {
+            overflow: hidden;
+        }
+
+        #header {
+            width: 100%;
+            height: 60px;
+            background: #444;
+            color: #fff;
+        }
+
+        #sidebar {
+            width: 250px;
+            height: calc(100vh - 60px);
+            float: left;
+            background: #333;
+            color: #fff;
+            overflow-y: auto;
+        }
+
+        #mapWrap {
+            margin-left: 250px;
+            height: calc(100vh - 60px);
+            background: #eee;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .navbar-brand {
+            display: inline-block;
+            padding: 10px;
+        }
+
+        .navbar-brand img {
+            max-height: 40px;
+            vertical-align: middle;
+        }
+
+        .main-navbar {
+            height: 60px;
+            background: #222;
+        }
+
+        .navbar-right {
+            float: right;
+        }
+
+        .navbar-right li {
+            display: inline-block;
+            margin-right: 15px;
+            line-height: 60px;
+        }
+
+        .navbar-right li a {
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .sidebar-content {
+            padding: 15px;
+        }
+
+        .nav.nav-tabs.nav-default li {
+            list-style-type: none;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .nav.nav-tabs.nav-default li a {
+            color: #fff;
+            padding: 5px 10px;
+            text-decoration: none;
+            display: inline-block;
+            background: #555;
+        }
+
+        .tab-content {
+            margin-top: 15px;
+            color: #eee;
+        }
+
+        .tab-pane-header {
+            margin-bottom: 10px;
+        }
+
+        .tab-pane-body {
+            background: #444;
+            padding: 10px;
+            min-height: 100px;
+        }
+
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+    </style>
 </head>
 
 <body>
-    <h1>Dashboard</h1>
-    <div><a href="/logout">Logout</a></div>
-    <div id="userInfo"></div>
-    <div>
-        <h3>Cadastrar Dispositivo</h3>
-        <input type="text" id="imeiField" placeholder="IMEI"><br>
-        <input type="text" id="nameField" placeholder="Nome"><br>
-        <input type="text" id="plateField" placeholder="Placa"><br>
-        <input type="text" id="brandField" placeholder="Marca"><br>
-        <input type="text" id="modelField" placeholder="Modelo"><br>
-        <input type="text" id="yearField" placeholder="Ano"><br>
-        <input type="text" id="colorField" placeholder="Cor"><br>
-        <button onclick="registerDevice()">Salvar</button>
+
+    <div id="header">
+        <nav class="navbar main-navbar">
+            <div class="navbar-header">
+                <a class="navbar-brand" href="#">
+                    <img src="images/logo.png" alt="PyDenTrack">
+                </a>
+            </div>
+            <ul class="navbar-right">
+                <li><a href="#" onclick="openPage('admin_tab');">ADMIN</a></li>
+                <li><a href="#" onclick="openPage('tools_tab');">Ferramentas</a></li>
+                <li><a href="#" onclick="openPage('config_tab');">Configuração</a></li>
+                <li><a href="#" onclick="logout();">Sair</a></li>
+            </ul>
+        </nav>
     </div>
-    <div>
-        <h3>Meus Dispositivos</h3>
-        <select id="deviceSelect"></select>
-        <button onclick="loadPositions()">Carregar</button>
-        <div id="positions"></div>
+
+    <div id="sidebar">
+        <div class="sidebar-content">
+            <ul class="nav nav-tabs nav-default">
+                <li class="active"><a href="#objects_tab" onclick="openTab('objects_tab')">Veículos</a></li>
+                <li><a href="#events_tab" onclick="openTab('events_tab')">Eventos</a></li>
+                <li><a href="#history_tab" onclick="openTab('history_tab')">Histórico</a></li>
+            </ul>
+
+            <div class="tab-content">
+                <div id="objects_tab" class="tab-pane active">
+                    <div class="tab-pane-header">
+                        <h4>Veículos</h4>
+                    </div>
+                    <div class="tab-pane-body">
+                        <p>Aqui você pode gerenciar seus veículos cadastrados.</p>
+                    </div>
+                </div>
+
+                <div id="events_tab" class="tab-pane">
+                    <div class="tab-pane-header">
+                        <h4>Eventos</h4>
+                    </div>
+                    <div class="tab-pane-body">
+                        <p>Aqui você pode visualizar eventos (alertas, cercas, etc.).</p>
+                    </div>
+                </div>
+
+                <div id="history_tab" class="tab-pane">
+                    <div class="tab-pane-header">
+                        <h4>Histórico</h4>
+                    </div>
+                    <div class="tab-pane-body">
+                        <p>Aqui você pode consultar o histórico de rotas.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div id="map" style="width:600px;height:400px"></div>
-    <script async
-        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCAwvAt4l0Pkb1c52FLUE-ttVxm4YZ9J8M&callback=initMap"></script>
+
+    <div id="mapWrap">
+        <div id="map"></div>
+    </div>
+
+    <script>
+        function openTab(tabId) {
+            var tabs = document.querySelectorAll('.tab-pane');
+            tabs.forEach(function (t) { t.classList.remove('active'); });
+            document.getElementById(tabId).classList.add('active');
+        }
+        function openPage(page) {
+            alert('Página: ' + page);
+        }
+        function logout() {
+            alert('Sair do sistema');
+        }
+    </script>
+
 </body>
 
 </html>
