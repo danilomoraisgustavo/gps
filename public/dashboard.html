@@ -3,35 +3,153 @@
 
 <head>
     <meta charset="utf-8">
-    <title>PyDenTrack – Rastreamento</title>
+    <title>PyDenTrack - Rastreamento Completo</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="shortcut icon" href="images/favicon.ico" type="image/x-icon">
-    <link rel="stylesheet" href="css/dark-green.css">
+    <!-- Se quiser usar Bootstrap, basta descomentar abaixo:
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3/dist/css/bootstrap.min.css">
+  -->
     <style>
         body {
-            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background: #f2f2f2;
         }
 
         #header {
             width: 100%;
             height: 60px;
-            background: #444;
+            background: #333;
             color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        #header .logo {
+            margin-left: 15px;
+        }
+
+        #header ul {
+            list-style: none;
+            margin-right: 15px;
+        }
+
+        #header li {
+            display: inline-block;
+            margin: 0 10px;
+        }
+
+        #header a {
+            color: #fff;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        #container {
+            display: flex;
+            height: calc(100vh - 60px);
         }
 
         #sidebar {
-            width: 250px;
-            height: calc(100vh - 60px);
-            float: left;
-            background: #333;
-            color: #fff;
+            width: 240px;
+            background: #444;
+            color: #eee;
             overflow-y: auto;
         }
 
-        #mapWrap {
-            margin-left: 250px;
-            height: calc(100vh - 60px);
-            background: #eee;
+        #mainContent {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #tabs {
+            display: flex;
+            background: #555;
+        }
+
+        #tabs button {
+            background: #555;
+            border: none;
+            color: #fff;
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        #tabs button.active {
+            background: #666;
+            font-weight: bold;
+        }
+
+        #tabContent {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #fff;
+        }
+
+        .tabPane {
+            display: none;
+        }
+
+        .tabPane.active {
+            display: block;
+        }
+
+        .section-title {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .form-field {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 3px;
+        }
+
+        input[type=text] {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 5px;
+            margin-bottom: 5px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            background: #fafafa;
+        }
+
+        table th,
+        table td {
+            padding: 8px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        table th {
+            background: #ddd;
+        }
+
+        button.btn {
+            background: #007bff;
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            padding: 6px 10px;
+            margin-right: 5px;
+        }
+
+        #mapContainer {
+            position: relative;
+            height: 400px;
+            margin-top: 10px;
         }
 
         #map {
@@ -39,75 +157,8 @@
             height: 100%;
         }
 
-        .navbar-brand {
-            display: inline-block;
-            padding: 10px;
-        }
-
-        .navbar-brand img {
-            max-height: 40px;
-            vertical-align: middle;
-        }
-
-        .main-navbar {
-            height: 60px;
-            background: #222;
-        }
-
-        .navbar-right {
-            float: right;
-        }
-
-        .navbar-right li {
-            display: inline-block;
-            margin-right: 15px;
-            line-height: 60px;
-        }
-
-        .navbar-right li a {
-            color: #fff;
-            text-decoration: none;
-        }
-
-        .sidebar-content {
-            padding: 15px;
-        }
-
-        .nav.nav-tabs.nav-default li {
-            list-style-type: none;
-            display: inline-block;
-            margin-right: 5px;
-        }
-
-        .nav.nav-tabs.nav-default li a {
-            color: #fff;
-            padding: 5px 10px;
-            text-decoration: none;
-            display: inline-block;
-            background: #555;
-        }
-
-        .tab-content {
-            margin-top: 15px;
-            color: #eee;
-        }
-
-        .tab-pane-header {
-            margin-bottom: 10px;
-        }
-
-        .tab-pane-body {
-            background: #444;
-            padding: 10px;
-            min-height: 100px;
-        }
-
-        .tab-pane {
+        .hidden {
             display: none;
-        }
-
-        .tab-pane.active {
-            display: block;
         }
     </style>
 </head>
@@ -115,78 +166,307 @@
 <body>
 
     <div id="header">
-        <nav class="navbar main-navbar">
-            <div class="navbar-header">
-                <a class="navbar-brand" href="#">
-                    <img src="images/logo.png" alt="PyDenTrack">
-                </a>
-            </div>
-            <ul class="navbar-right">
-                <li><a href="#" onclick="openPage('admin_tab');">ADMIN</a></li>
-                <li><a href="#" onclick="openPage('tools_tab');">Ferramentas</a></li>
-                <li><a href="#" onclick="openPage('config_tab');">Configuração</a></li>
-                <li><a href="#" onclick="logout();">Sair</a></li>
-            </ul>
-        </nav>
+        <div class="logo">
+            <strong>PyDenTrack</strong> - Rastreamento Completo
+        </div>
+        <ul>
+            <li><a href="#" onclick="logout()">Sair</a></li>
+        </ul>
     </div>
 
-    <div id="sidebar">
-        <div class="sidebar-content">
-            <ul class="nav nav-tabs nav-default">
-                <li class="active"><a href="#objects_tab" onclick="openTab('objects_tab')">Veículos</a></li>
-                <li><a href="#events_tab" onclick="openTab('events_tab')">Eventos</a></li>
-                <li><a href="#history_tab" onclick="openTab('history_tab')">Histórico</a></li>
-            </ul>
+    <div id="container">
+        <div id="sidebar">
+            <!-- Apenas exibindo algo no sidebar -->
+            <h3 style="margin:10px;">Menu Lateral</h3>
+            <p style="margin:10px;">Aqui você pode colocar links adicionais, botões, etc.</p>
+        </div>
 
-            <div class="tab-content">
-                <div id="objects_tab" class="tab-pane active">
-                    <div class="tab-pane-header">
-                        <h4>Veículos</h4>
+        <div id="mainContent">
+            <div id="tabs">
+                <button class="active" id="devicesTabBtn" onclick="showTab('devicesTab')">Veículos</button>
+                <button id="eventsTabBtn" onclick="showTab('eventsTab')">Eventos</button>
+                <button id="historyTabBtn" onclick="showTab('historyTab')">Histórico</button>
+            </div>
+
+            <div id="tabContent">
+                <!-- ABA DE VEÍCULOS -->
+                <div id="devicesTab" class="tabPane active">
+                    <h2 class="section-title">Cadastro e Listagem de Veículos</h2>
+                    <div style="display:flex;gap:20px;">
+                        <div style="flex:1;">
+                            <h4>Novo Veículo</h4>
+                            <div class="form-field">
+                                <label>IMEI</label>
+                                <input type="text" id="newImei" placeholder="IMEI do rastreador">
+                            </div>
+                            <div class="form-field">
+                                <label>Nome do veículo</label>
+                                <input type="text" id="newName" placeholder="Ex: Caminhão X">
+                            </div>
+                            <div class="form-field">
+                                <label>Placa</label>
+                                <input type="text" id="newPlate" placeholder="Ex: ABC-1234">
+                            </div>
+                            <div class="form-field">
+                                <label>Marca</label>
+                                <input type="text" id="newBrand" placeholder="Ex: Volkswagen">
+                            </div>
+                            <div class="form-field">
+                                <label>Modelo</label>
+                                <input type="text" id="newModel" placeholder="Ex: Delivery">
+                            </div>
+                            <div class="form-field">
+                                <label>Ano</label>
+                                <input type="text" id="newYear" placeholder="Ex: 2023">
+                            </div>
+                            <div class="form-field">
+                                <label>Cor</label>
+                                <input type="text" id="newColor" placeholder="Ex: Branco">
+                            </div>
+                            <button class="btn" onclick="createDevice()">Cadastrar Veículo</button>
+                        </div>
+
+                        <div style="flex:1;">
+                            <h4>Lista de Veículos</h4>
+                            <table id="devicesTable">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>IMEI</th>
+                                        <th>Nome</th>
+                                        <th>Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
                     </div>
-                    <div class="tab-pane-body">
-                        <p>Aqui você pode gerenciar seus veículos cadastrados.</p>
+
+                    <div id="editDeviceForm" class="hidden" style="margin-top:20px;">
+                        <h4>Editar Veículo</h4>
+                        <input type="hidden" id="editId">
+                        <div class="form-field">
+                            <label>IMEI</label>
+                            <input type="text" id="editImei">
+                        </div>
+                        <div class="form-field">
+                            <label>Nome</label>
+                            <input type="text" id="editName">
+                        </div>
+                        <div class="form-field">
+                            <label>Placa</label>
+                            <input type="text" id="editPlate">
+                        </div>
+                        <div class="form-field">
+                            <label>Marca</label>
+                            <input type="text" id="editBrand">
+                        </div>
+                        <div class="form-field">
+                            <label>Modelo</label>
+                            <input type="text" id="editModel">
+                        </div>
+                        <div class="form-field">
+                            <label>Ano</label>
+                            <input type="text" id="editYear">
+                        </div>
+                        <div class="form-field">
+                            <label>Cor</label>
+                            <input type="text" id="editColor">
+                        </div>
+                        <button class="btn" onclick="saveEdits()">Salvar Alterações</button>
+                        <button class="btn" style="background:#999;" onclick="cancelEdit()">Cancelar</button>
                     </div>
                 </div>
 
-                <div id="events_tab" class="tab-pane">
-                    <div class="tab-pane-header">
-                        <h4>Eventos</h4>
-                    </div>
-                    <div class="tab-pane-body">
-                        <p>Aqui você pode visualizar eventos (alertas, cercas, etc.).</p>
-                    </div>
+                <!-- ABA DE EVENTOS -->
+                <div id="eventsTab" class="tabPane">
+                    <h2 class="section-title">Eventos</h2>
+                    <p>Aqui você pode exibir e gerenciar eventos (alertas, cercas, etc.). Exemplo de placeholder.</p>
                 </div>
 
-                <div id="history_tab" class="tab-pane">
-                    <div class="tab-pane-header">
-                        <h4>Histórico</h4>
+                <!-- ABA DE HISTÓRICO -->
+                <div id="historyTab" class="tabPane">
+                    <h2 class="section-title">Histórico</h2>
+                    <p>Exemplo simples de busca de histórico:</p>
+                    <div>
+                        <label>Selecione um veículo:</label>
+                        <select id="historyDeviceSelect"></select>
+                        <button class="btn" onclick="loadPositionsForHistory()">Carregar Histórico</button>
                     </div>
-                    <div class="tab-pane-body">
-                        <p>Aqui você pode consultar o histórico de rotas.</p>
+                    <div id="mapContainer">
+                        <div id="map"></div>
                     </div>
+                    <div id="historyPositions"></div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div id="mapWrap">
-        <div id="map"></div>
-    </div>
+    <!-- IMPORTS DO GOOGLE MAPS (troque a KEY se quiser) -->
+    <script async
+        src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCAwvAt4l0Pkb1c52FLUE-ttVxm4YZ9J8M&callback=initMap"></script>
 
     <script>
-        function openTab(tabId) {
-            var tabs = document.querySelectorAll('.tab-pane');
-            tabs.forEach(function (t) { t.classList.remove('active'); });
-            document.getElementById(tabId).classList.add('active');
-        }
-        function openPage(page) {
-            alert('Página: ' + page);
+        let currentTab = 'devicesTab'
+        let map
+        let marker
+
+        function showTab(tabId) {
+            document.querySelectorAll('.tabPane').forEach(p => p.classList.remove('active'))
+            document.querySelectorAll('#tabs button').forEach(b => b.classList.remove('active'))
+            document.getElementById(tabId).classList.add('active')
+            document.getElementById(tabId + 'Btn').classList.add('active')
+            currentTab = tabId
         }
         function logout() {
-            alert('Sair do sistema');
+            // Exemplo simples
+            alert('Logout efetuado!')
+            // Redirecionar ou chamar rota /logout se quiser
+        }
+
+        // INICIALIZAR MAPA
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: { lat: 0, lng: 0 },
+                zoom: 2
+            })
+        }
+
+        // CARREGAR VEÍCULOS
+        async function loadDevices() {
+            let r = await fetch('/devices')
+            let list = await r.json()
+            let tbody = document.querySelector('#devicesTable tbody')
+            tbody.innerHTML = ''
+            list.forEach(dev => {
+                let tr = document.createElement('tr')
+                tr.innerHTML = `
+      <td>${dev.id}</td>
+      <td>${dev.imei}</td>
+      <td>${dev.name || ''}</td>
+      <td>
+        <button class="btn" onclick="editDevice(${dev.id}, '${dev.imei}', '${dev.name || ''}', '${dev.plate || ''}', '${dev.brand || ''}', '${dev.model || ''}', '${dev.year || ''}', '${dev.color || ''}')">Editar</button>
+        <button class="btn" style="background:#c33;" onclick="deleteDevice(${dev.id})">Excluir</button>
+      </td>
+    `
+                tbody.appendChild(tr)
+            })
+            // Preenche select do histórico
+            let selHist = document.getElementById('historyDeviceSelect')
+            selHist.innerHTML = ''
+            list.forEach(dev => {
+                let o = document.createElement('option')
+                o.value = dev.id
+                o.textContent = `ID:${dev.id} - ${dev.name || ''} [${dev.imei}]`
+                selHist.appendChild(o)
+            })
+        }
+
+        async function createDevice() {
+            let imei = document.getElementById('newImei').value
+            let name = document.getElementById('newName').value
+            let plate = document.getElementById('newPlate').value
+            let brand = document.getElementById('newBrand').value
+            let model = document.getElementById('newModel').value
+            let year = document.getElementById('newYear').value
+            let color = document.getElementById('newColor').value
+            let data = { imei, name, plate, brand, model, year, color }
+            await fetch('/devices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            })
+            alert('Veículo cadastrado com sucesso!')
+            document.getElementById('newImei').value = ''
+            document.getElementById('newName').value = ''
+            document.getElementById('newPlate').value = ''
+            document.getElementById('newBrand').value = ''
+            document.getElementById('newModel').value = ''
+            document.getElementById('newYear').value = ''
+            document.getElementById('newColor').value = ''
+            loadDevices()
+        }
+
+        function editDevice(id, imei, name, plate, brand, model, year, color) {
+            document.getElementById('editDeviceForm').classList.remove('hidden')
+            document.getElementById('editId').value = id
+            document.getElementById('editImei').value = imei
+            document.getElementById('editName').value = name
+            document.getElementById('editPlate').value = plate
+            document.getElementById('editBrand').value = brand
+            document.getElementById('editModel').value = model
+            document.getElementById('editYear').value = year
+            document.getElementById('editColor').value = color
+        }
+
+        function cancelEdit() {
+            document.getElementById('editDeviceForm').classList.add('hidden')
+        }
+
+        async function saveEdits() {
+            let id = document.getElementById('editId').value
+            let imei = document.getElementById('editImei').value
+            let name = document.getElementById('editName').value
+            let plate = document.getElementById('editPlate').value
+            let brand = document.getElementById('editBrand').value
+            let model = document.getElementById('editModel').value
+            let year = document.getElementById('editYear').value
+            let color = document.getElementById('editColor').value
+            // No server, não temos rota PUT específica, mas poderíamos criar.
+            // Exemplo: /devices/update. Supondo que não exista, mostraremos a ideia:
+            await fetch(`/devices/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ imei, name, plate, brand, model, year, color })
+            })
+            alert('Veículo atualizado (exemplo fictício, rota PUT precisaria existir no server).')
+            document.getElementById('editDeviceForm').classList.add('hidden')
+            loadDevices()
+        }
+
+        async function deleteDevice(id) {
+            let ok = confirm('Deseja excluir este veículo?')
+            if (!ok) return
+            // No server, poderíamos ter rota DELETE /devices/:id
+            await fetch(`/devices/${id}`, { method: 'DELETE' })
+            alert('Veículo excluído (exemplo fictício, rota DELETE precisaria existir no server).')
+            loadDevices()
+        }
+
+        // HISTÓRICO
+        async function loadPositionsForHistory() {
+            let sel = document.getElementById('historyDeviceSelect')
+            let deviceId = sel.value
+            let r = await fetch('/positions?deviceId=' + deviceId)
+            let arr = await r.json()
+            let histDiv = document.getElementById('historyPositions')
+            histDiv.innerHTML = ''
+            if (!arr.length) {
+                histDiv.innerHTML = 'Nenhuma posição encontrada para este dispositivo.'
+                return
+            }
+            // Mostrar a 1ª coord no mapa
+            let lat = arr[0].latitude
+            let lng = arr[0].longitude
+            map.setCenter({ lat, lng })
+            map.setZoom(14)
+            if (!marker) {
+                marker = new google.maps.Marker({ map })
+            }
+            marker.setPosition({ lat, lng })
+            // Listar no HTML
+            arr.forEach(pos => {
+                let d = document.createElement('div')
+                d.textContent = `Data: ${pos.timestamp}, Lat:${pos.latitude}, Lng:${pos.longitude}, Vel:${pos.speed}`
+                histDiv.appendChild(d)
+            })
+        }
+
+        window.onload = async function () {
+            // Carrega lista de veículos
+            loadDevices()
         }
     </script>
-
 </body>
 
 </html>
