@@ -135,7 +135,9 @@ const parsePacket = (data) => {
 
 const tcpServer = net.createServer((socket) => {
     socket.on('data', (buf) => {
+        console.log('Pacote recebido:', buf.toString('hex'))
         let p = parsePacket(buf)
+        console.log('Pacote parseado:', p)
         if (p && p.type === 'login') {
             socket.write(Buffer.from([0x78, 0x78, 0x05, 0x01, 0x00, 0x01, 0xD9, 0xDC, 0x0D, 0x0A]))
         }
