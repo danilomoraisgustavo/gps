@@ -104,7 +104,7 @@ app.get("/api/devices", auth, async (req, res) => {
     }
 });
 
-app.listen(4000);
+app.listen(6000);
 
 function crc16X25(buf) {
     let crc = 0xffff;
