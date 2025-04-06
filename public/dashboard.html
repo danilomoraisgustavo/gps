@@ -39,7 +39,7 @@
         }
 
         .sidebar {
-            width: 250px;
+            width: 300px;
             background: #f2f2f2;
             padding: 10px;
             overflow-y: auto;
@@ -67,6 +67,22 @@
             background: #fff;
             margin-bottom: 5px;
             border: 1px solid #ccc;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .device-info {
+            flex: 1;
+        }
+
+        .device-actions {
+            margin-left: 5px;
+        }
+
+        .device-actions i {
+            margin-left: 6px;
             cursor: pointer;
         }
 
@@ -74,7 +90,8 @@
             flex: 1;
         }
 
-        .modal-bg {
+        .modal-bg,
+        .modal-bg-commands {
             position: fixed;
             display: none;
             top: 0;
@@ -137,20 +154,40 @@
     <div class="container">
         <div class="sidebar">
             <h3>Devices</h3>
-            <button onclick="showModal()">+ Add GT06</button>
+            <button onclick="showAddDeviceModal()">+ Add GT06</button>
             <ul class="devices" id="devices-list"></ul>
         </div>
         <div id="map"></div>
         <div id="info"></div>
     </div>
+
+    <!-- Modal for adding device -->
     <div class="modal-bg" id="modal-bg">
         <div class="modal">
             <h2>Add GT06 Device</h2>
             <input id="deviceName" placeholder="Device Name">
             <input id="deviceImei" placeholder="GT06 IMEI">
             <div class="modal-actions">
-                <button onclick="closeModal()">Cancel</button>
+                <button onclick="closeAddDeviceModal()">Cancel</button>
                 <button onclick="addDevice()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for commands -->
+    <div class="modal-bg-commands" id="modal-bg-commands">
+        <div class="modal">
+            <h2>Send Command</h2>
+            <p id="cmd-device-info" style="font-weight:bold;"></p>
+            <select id="cmd-type" style="width:100%;margin-bottom:10px;">
+                <option value="engineStop">Engine Stop (Cut Oil)</option>
+                <option value="engineResume">Engine Resume</option>
+                <option value="custom">Custom</option>
+            </select>
+            <input id="cmd-custom-text" placeholder="Enter custom command if needed (e.g. DWXX#)">
+            <div class="modal-actions">
+                <button onclick="closeCmdModal()">Cancel</button>
+                <button onclick="sendCommandToDevice()">Send</button>
             </div>
         </div>
     </div>
@@ -161,12 +198,13 @@
         if (!token) {
             window.location = "/";
         }
+
         let map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
         let markers = {};
         let infoDiv = document.getElementById("info");
 
-        async function logout() {
+        function logout() {
             localStorage.removeItem("token");
             window.location = "/";
         }
@@ -179,14 +217,84 @@
             alert("Tools clicked");
         }
 
-        function showModal() {
+        // ----------------------------------------------------------------
+        //  MODAL: ADD DEVICE
+        // ----------------------------------------------------------------
+        function showAddDeviceModal() {
             document.getElementById("modal-bg").style.display = "flex";
         }
-
-        function closeModal() {
+        function closeAddDeviceModal() {
             document.getElementById("modal-bg").style.display = "none";
         }
+        async function addDevice() {
+            let name = document.getElementById("deviceName").value.trim();
+            let imei = document.getElementById("deviceImei").value.trim();
+            if (!name || !imei) {
+                alert("Please enter both name and IMEI");
+                return;
+            }
+            let r = await fetch("/api/devices", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({ name, imei })
+            });
+            let j = await r.json();
+            if (j.error) {
+                alert(j.error);
+            } else {
+                closeAddDeviceModal();
+                document.getElementById("deviceName").value = "";
+                document.getElementById("deviceImei").value = "";
+                loadDevices();
+            }
+        }
 
+        // ----------------------------------------------------------------
+        //  MODAL: COMMANDS
+        // ----------------------------------------------------------------
+        let currentDevice = null;
+        function showCmdModal(device) {
+            currentDevice = device;
+            document.getElementById("cmd-device-info").innerText = "IMEI: " + device.imei + " / " + device.name;
+            document.getElementById("cmd-type").value = "engineStop";
+            document.getElementById("cmd-custom-text").value = "";
+            document.getElementById("modal-bg-commands").style.display = "flex";
+        }
+        function closeCmdModal() {
+            document.getElementById("modal-bg-commands").style.display = "none";
+        }
+        async function sendCommandToDevice() {
+            if (!currentDevice) return;
+            let cmdType = document.getElementById("cmd-type").value;
+            let customText = document.getElementById("cmd-custom-text").value.trim();
+            // Exemplo simples: enviamos via fetch a uma rota do backend que chamaria a função sendToDevice
+            let r = await fetch("/api/send-command", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({
+                    imei: currentDevice.imei,
+                    cmdType,
+                    customText
+                })
+            });
+            let j = await r.json();
+            if (j.error) {
+                alert("Erro ao enviar comando: " + j.error);
+            } else {
+                alert("Comando enviado com sucesso. Veja logs do servidor para resposta.");
+            }
+            closeCmdModal();
+        }
+
+        // ----------------------------------------------------------------
+        //  LOADING DEVICES + MAP
+        // ----------------------------------------------------------------
         async function loadDevices() {
             let r = await fetch("/api/devices", {
                 headers: { "Authorization": "Bearer " + token }
@@ -199,8 +307,45 @@
                 list.innerHTML = "";
                 j.forEach(d => {
                     let li = document.createElement("li");
-                    li.innerText = d.name + " (" + d.imei + ")";
-                    li.onclick = () => { selectDevice(d); };
+                    let leftDiv = document.createElement("div");
+                    leftDiv.classList.add("device-info");
+                    leftDiv.innerText = d.name + " (" + d.imei + ")";
+
+                    let iconsDiv = document.createElement("div");
+                    iconsDiv.classList.add("device-actions");
+
+                    // Botão Localizar / Exibir no mapa
+                    let locateIcon = document.createElement("i");
+                    locateIcon.innerHTML = "📍";
+                    locateIcon.title = "Localizar no Mapa";
+                    locateIcon.onclick = (evt) => {
+                        evt.stopPropagation();
+                        selectDevice(d);
+                    };
+                    iconsDiv.appendChild(locateIcon);
+
+                    // Botão Editar
+                    let editIcon = document.createElement("i");
+                    editIcon.innerHTML = "✎";
+                    editIcon.title = "Editar device";
+                    editIcon.onclick = (evt) => {
+                        evt.stopPropagation();
+                        alert("Aqui abriríamos um modal para editar o device. (Não implementado)");
+                    };
+                    iconsDiv.appendChild(editIcon);
+
+                    // Botão Comandos
+                    let cmdIcon = document.createElement("i");
+                    cmdIcon.innerHTML = "⚙️";
+                    cmdIcon.title = "Enviar Comandos";
+                    cmdIcon.onclick = (evt) => {
+                        evt.stopPropagation();
+                        showCmdModal(d);
+                    };
+                    iconsDiv.appendChild(cmdIcon);
+
+                    li.appendChild(leftDiv);
+                    li.appendChild(iconsDiv);
                     list.appendChild(li);
                 });
             }
@@ -229,34 +374,7 @@
             }
         }
 
-        async function addDevice() {
-            let name = document.getElementById("deviceName").value.trim();
-            let imei = document.getElementById("deviceImei").value.trim();
-            if (!name || !imei) {
-                alert("Please enter both name and IMEI");
-                return;
-            }
-            let r = await fetch("/api/devices", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + token
-                },
-                body: JSON.stringify({ name, imei })
-            });
-            let j = await r.json();
-            if (j.error) {
-                alert(j.error);
-            } else {
-                closeModal();
-                document.getElementById("deviceName").value = "";
-                document.getElementById("deviceImei").value = "";
-                loadDevices();
-            }
-        }
-
-        loadDevices();
-
+        // Atualiza posições no mapa a cada 5s
         setInterval(async () => {
             let r = await fetch("/api/positions/live", {
                 headers: { "Authorization": "Bearer " + token }
@@ -270,6 +388,8 @@
                 });
             }
         }, 5000);
+
+        loadDevices();
     </script>
 </body>
 
