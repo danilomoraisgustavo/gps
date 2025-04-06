@@ -3,11 +3,61 @@
 
 <head>
     <meta charset="utf-8">
-    <title>Início</title>
+    <title>PyDenTrack-GPS - Login</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .login-container {
+            max-width: 300px;
+            margin: 40px auto;
+            padding: 20px;
+            border: 1px solid #ccc;
+        }
+
+        input {
+            display: block;
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px;
+        }
+
+        button {
+            padding: 10px;
+            width: 100%;
+            cursor: pointer;
+        }
+    </style>
 </head>
 
 <body>
-    <script>window.location = '/login.html'</script>
+    <div class="login-container">
+        <h2>Login</h2>
+        <input id="login-username" placeholder="Username">
+        <input id="login-password" placeholder="Password" type="password">
+        <button onclick="loginUser()">Login</button>
+    </div>
+    <script>
+        async function loginUser() {
+            let username = document.getElementById("login-username").value;
+            let password = document.getElementById("login-password").value;
+            let r = await fetch("/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ username, password })
+            });
+            let j = await r.json();
+            if (j.error) {
+                alert(j.error);
+            } else {
+                localStorage.setItem("token", j.token);
+                window.location = "/dashboard.html";
+            }
+        }
+    </script>
 </body>
 
 </html>
