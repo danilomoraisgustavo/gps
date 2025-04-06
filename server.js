@@ -410,7 +410,7 @@ function decodeGt06(socket, frame) {
         respond(socket, frame, type, Buffer.alloc(0), false);
         console.log(`[GT06] Inserindo pacote de login no banco. IMEI=${imei}`);
         insertData(imei, type, frame.toString("hex"), null, null, new Date());
-    } else if (type === 0x10) {
+    } else if (type === 0x10 || type === 0x12) {
         let imei = deviceSessions[socket.id] || "";
         console.log(`[GT06] Pacote de GPS. IMEI=${imei}`);
         let gps = decodeGps(content);
