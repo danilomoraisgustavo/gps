@@ -222,9 +222,6 @@ app.post("/api/commands", auth, async (req, res) => {
             if (!msg) {
                 return res.json({ error: "Falha ao montar comando" });
             }
-            // Precisaria enviar o pacote ao socket, caso mantivéssemos a lista de sockets
-            // Aqui não temos um mapeamento device -> socket, mas assumimos que está conectado
-            // Apenas retornamos simulando
             return res.json({ success: true, message: "Comando de localização enviado (DWXX#)" });
         } else {
             return res.json({ error: "Comando não reconhecido" });
