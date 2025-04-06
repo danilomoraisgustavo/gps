@@ -40,6 +40,8 @@ async function initDB() {
 }
 initDB();
 
+// ---------------------- ROTAS DE USUÁRIOS (REGISTRO / LOGIN) ----------------------
+
 app.post("/register", async (req, res) => {
     console.log("REQUISIÇÃO POST /register recebida. Dados:", req.body);
     try {
@@ -101,6 +103,8 @@ function auth(req, res, next) {
     }
 }
 
+// ---------------------- OUTRAS ROTAS ----------------------
+
 app.get("/profile", auth, (req, res) => {
     console.log("GET /profile - Usuário autenticado:", req.user);
     res.json({ id: req.user.id, username: req.user.username });
@@ -110,6 +114,8 @@ app.get("/", (req, res) => {
     console.log("GET / (Página inicial /public/index.html)");
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
+
+// ---------------------- ROTAS DE DISPOSITIVOS ----------------------
 
 app.post("/api/devices", auth, async (req, res) => {
     console.log("REQUISIÇÃO POST /api/devices recebida. Dados:", req.body, "Usuário autenticado:", req.user);
@@ -160,6 +166,8 @@ app.get("/api/devices", auth, async (req, res) => {
     }
 });
 
+// ---------------------- ROTAS DE POSIÇÕES ----------------------
+
 app.get("/api/positions/last", auth, async (req, res) => {
     console.log("GET /api/positions/last - Query params:", req.query);
     let imei = req.query.imei;
@@ -208,6 +216,8 @@ app.get("/api/positions/live", auth, async (req, res) => {
     }
 });
 
+// ---------------------- ROTAS DE COMANDOS ----------------------
+
 app.post("/api/commands", auth, async (req, res) => {
     console.log("POST /api/commands", req.body);
     try {
@@ -216,12 +226,13 @@ app.post("/api/commands", auth, async (req, res) => {
         if (find.rowCount === 0) {
             return res.json({ error: "Dispositivo não encontrado ou não pertence a este usuário" });
         }
-        // Aqui poderíamos chamar a função de envio. Se for "command: 'location'", mandar "DWXX#"
+        // Exemplo: "command: 'location'" => "DWXX#"
         if (command === "location") {
             let msg = sendCommand(deviceId, "custom", "", false, "123456", false, "DWXX#");
             if (!msg) {
                 return res.json({ error: "Falha ao montar comando" });
             }
+            // Simulação apenas - caso seu código não mantenha socket do IMEI, só registra
             return res.json({ success: true, message: "Comando de localização enviado (DWXX#)" });
         } else {
             return res.json({ error: "Comando não reconhecido" });
@@ -232,9 +243,13 @@ app.post("/api/commands", auth, async (req, res) => {
     }
 });
 
+// ---------------------- START DO SERVIDOR HTTP ----------------------
+
 app.listen(4000, () => {
     console.log("Servidor HTTP rodando na porta 4000");
 });
+
+// ---------------------- FUNÇÕES DE SUPORTE PROTOCOLO GT06 ----------------------
 
 function crc16X25(buf) {
     let crc = 0xffff;
@@ -261,63 +276,109 @@ function encodeCommand(gt06Password, content, language) {
     let c = Buffer.from(content, "ascii");
     let bodyLength = 1 + 1 + 4 + c.length + 2 + 2 + (language ? 2 : 0);
     let packet = Buffer.alloc(bodyLength + 4);
+
+    // Start Bits
     packet[0] = 0x78;
     packet[1] = 0x78;
+
+    // Length
     packet[2] = bodyLength;
+
+    // Protocol Number (0x80 = comando do servidor para terminal)
     packet[3] = 0x80;
+
+    // command length = c.length + 4
     packet[4] = c.length + 4;
+
+    // 4 bytes de 'server flag' fixo
     packet.writeUInt32BE(0, 5);
+
+    // copia conteúdo do comando
     c.copy(packet, 9);
+
     let idx = 9 + c.length;
+
+    // se 'language === true', adicionamos 2 bytes
     if (language) {
         packet.writeUInt16BE(2, idx);
         idx += 2;
     }
+
+    // info serial number = 0x0000
     packet.writeUInt16BE(0, idx);
+
+    // calcula CRC
     let crc = crc16X25(packet.subarray(2, bodyLength + 2));
     packet.writeUInt16BE(crc, idx + 2);
+
+    // stop bits
     packet[bodyLength + 2 + 2] = 0x0d;
     packet[bodyLength + 2 + 3] = 0x0a;
+
     console.log("[GT06] Pacote de comando codificado:", packet);
     return packet;
 }
 
+/**
+ * decodeFrame
+ * Lê o chunk e verifica se há um pacote GT06
+ * Se o length + 4 (ou +6 se start=79 79) não bater, marca erro e leftover
+ */
 function decodeFrame(buffer) {
     console.log("[GT06] decodeFrame - Recebendo pacote bruto:", buffer);
     if (buffer.length < 5) return null;
-    let start = (buffer[0] === 0x78 && buffer[1] === 0x78) ? 2 : ((buffer[0] === 0x79 && buffer[1] === 0x79) ? 4 : 0);
+
+    let start = (buffer[0] === 0x78 && buffer[1] === 0x78) ? 2
+        : ((buffer[0] === 0x79 && buffer[1] === 0x79) ? 4 : 0);
+
     if (!start) {
         console.log("[GT06] Início de pacote inválido:", buffer[0], buffer[1]);
         return null;
     }
+
     let length;
     if (start === 2) {
         if (buffer.length < 3) return null;
         length = buffer[2];
+        // length + 4 (2 start bits + stop bits) = total do frame
         if (buffer.length < length + 4) return null;
     } else {
         if (buffer.length < 4) return null;
         length = buffer.readUInt16BE(2);
+        // length + 6 (4 start bits + stop bits) = total do frame
         if (buffer.length < length + 6) return null;
     }
+
     let end = start + length;
+    // confere stop bits
     if (buffer[end] !== 0x0d || buffer[end + 1] !== 0x0a) {
         console.log("[GT06] Falha - não encontrou 0x0d0a no final do pacote");
         return null;
     }
+
+    // frame = slice do pacote
     let frame = buffer.subarray(0, end + (start === 2 ? 4 : 6));
+    // leftover = o que sobrou depois do frame
     let leftover = buffer.subarray(end + (start === 2 ? 4 : 6));
+
+    // retira do frame a parte para CRC (excluindo start bits e excluindo stop bits)
     let dataForCrc = frame.subarray(start === 2 ? 2 : 2, frame.length - 4);
+
     let readCrc = frame.readUInt16BE(frame.length - 4);
     let calc = crc16X25(dataForCrc);
     if (calc !== readCrc) {
         console.log("[GT06] Erro de CRC - calculado:", calc.toString(16), "lido:", readCrc.toString(16));
         return { frame: null, leftover };
     }
+
     console.log("[GT06] Pacote decodificado com sucesso:", frame);
     return { frame, leftover };
 }
 
+/**
+ * respond
+ * Responde pacotes GT06
+ */
 function respond(socket, frame, type, content, extended) {
     console.log(`[GT06] respond - Tipo:${type}, Estendido:${extended}, Conteúdo:`, content);
     if (!socket.destroyed) {
@@ -325,9 +386,11 @@ function respond(socket, frame, type, content, extended) {
         let length = extended
             ? (2 + 1 + (content ? content.length : 0) + 2 + 2)
             : (1 + (content ? content.length : 0) + 2 + 2);
+
         let answer = Buffer.alloc(extended ? length + 4 : length + 4);
         answer[0] = head >> 8;
         answer[1] = head & 0xff;
+
         if (extended) {
             answer.writeUInt16BE(length, 2);
             answer[4] = type;
@@ -360,6 +423,10 @@ function respond(socket, frame, type, content, extended) {
     }
 }
 
+/**
+ * decodeGps
+ * Lê time e lat/lon do conteúdo
+ */
 function decodeGps(content) {
     console.log("[GT06] decodeGps - Conteúdo bruto:", content);
     if (content.length < 12) return null;
@@ -369,18 +436,22 @@ function decodeGps(content) {
     let hh = content[3];
     let mm = content[4];
     let ss = content[5];
-    let dateStr = `20${y.toString().padStart(2, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')} ${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
+    let dateStr = `20${y.toString().padStart(2, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')} ` +
+        `${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
+
     let latRaw = content.readUInt32BE(6) / (60 * 30000);
     let lonRaw = content.readUInt32BE(10) / (60 * 30000);
+
     let lat = latRaw;
     let lon = lonRaw;
     console.log(`[GT06] GPS decodificado: Lat=${lat}, Lon=${lon}, Data/Hora=${dateStr}`);
     return { lat, lon, time: dateStr };
 }
 
-let deviceSessions = {};
-let partialData = new WeakMap();
-
+/**
+ * insertData
+ * Insere dados de pacotes no banco
+ */
 async function insertData(deviceId, frameType, rawData, lat, lon, time_stamp) {
     console.log(`[GT06] Salvando dados: IMEI=${deviceId}, frameType=${frameType}, lat=${lat}, lon=${lon}, time=${time_stamp}`);
     await pool.query(`
@@ -396,21 +467,31 @@ async function insertData(deviceId, frameType, rawData, lat, lon, time_stamp) {
     ]);
 }
 
+/**
+ * decodeGt06
+ * Recebe um frame GT06 decodificado e analisa protocol number
+ */
 function decodeGt06(socket, frame) {
     console.log("[GT06] decodeGt06 chamado para processar frame.");
     let start = (frame[0] === 0x78 && frame[1] === 0x78) ? 2 : 4;
     let type = frame[start];
     let content = frame.subarray(start + 1, frame.length - 4);
+
     if (type === 0x01) {
+        // Login message
         let imeiHex = content.subarray(0, 8).toString("hex");
         let imei = parseImeiHex(imeiHex);
         console.log(`[GT06] Pacote de Login. IMEI HEX=${imeiHex}, IMEI parseado=${imei}`);
         if (!imei) return;
+        // Salva imei para esta conexão
         deviceSessions[socket.id] = imei;
+
+        // Responde
         respond(socket, frame, type, Buffer.alloc(0), false);
         console.log(`[GT06] Inserindo pacote de login no banco. IMEI=${imei}`);
         insertData(imei, type, frame.toString("hex"), null, null, new Date());
     } else if (type === 0x10 || type === 0x12) {
+        // GPS data
         let imei = deviceSessions[socket.id] || "";
         console.log(`[GT06] Pacote de GPS. IMEI=${imei}`);
         let gps = decodeGps(content);
@@ -424,6 +505,7 @@ function decodeGt06(socket, frame) {
             insertData(imei, type, frame.toString("hex"), null, null, new Date());
         }
     } else {
+        // Demais tipos (heartbeat, alarm, etc.)
         console.log(`[GT06] Pacote de outro tipo. type=${type}`);
         respond(socket, frame, type, Buffer.alloc(0), false);
         let imei = deviceSessions[socket.id] || "";
@@ -432,13 +514,20 @@ function decodeGt06(socket, frame) {
     }
 }
 
+// ---------------------- SERVIDOR TCP GT06 ----------------------
+
+let deviceSessions = {};
+let partialData = new WeakMap();
+
 let server = net.createServer(socket => {
     socket.id = `${socket.remoteAddress}:${socket.remotePort}:${Date.now()}`;
     console.log(`[GT06] Nova conexão TCP: ${socket.id}`);
     partialData.set(socket, Buffer.alloc(0));
+
     socket.on("data", data => {
         console.log(`[GT06] Dados recebidos de ${socket.id}:`, data);
         let buffer = Buffer.concat([partialData.get(socket), data]);
+
         for (; ;) {
             let result = decodeFrame(buffer);
             if (!result || !result.frame) {
@@ -456,6 +545,7 @@ let server = net.createServer(socket => {
             }
         }
     });
+
     socket.on("end", () => {
         console.log(`[GT06] Conexão TCP finalizada: ${socket.id}`);
         partialData.delete(socket);
@@ -465,6 +555,8 @@ let server = net.createServer(socket => {
 server.listen(5023, () => {
     console.log("Servidor TCP GT06 rodando na porta 5023");
 });
+
+// ---------------------- ENVIO DE COMANDOS ----------------------
 
 function sendCommand(deviceId, cmdType, model, alternative, pass, lang, text) {
     console.log("[GT06] sendCommand", { deviceId, cmdType, model, alternative, pass, lang, text });
