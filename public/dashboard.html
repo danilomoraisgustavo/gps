@@ -1,3 +1,4 @@
+<!-- public/dashboard.html -->
 <!DOCTYPE html>
 <html>
 
@@ -73,7 +74,6 @@
             flex: 1;
         }
 
-        /* Modal Styles */
         .modal-bg {
             position: fixed;
             display: none;
@@ -112,6 +112,16 @@
         .modal-actions {
             text-align: right;
         }
+
+        #info {
+            position: absolute;
+            top: 60px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            z-index: 999;
+            font-size: 14px;
+        }
     </style>
 </head>
 
@@ -131,9 +141,8 @@
             <ul class="devices" id="devices-list"></ul>
         </div>
         <div id="map"></div>
+        <div id="info"></div>
     </div>
-
-    <!-- Modal for adding device -->
     <div class="modal-bg" id="modal-bg">
         <div class="modal">
             <h2>Add GT06 Device</h2>
@@ -154,6 +163,8 @@
         }
         let map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        let markers = {};
+        let infoDiv = document.getElementById("info");
 
         async function logout() {
             localStorage.removeItem("token");
@@ -178,9 +189,7 @@
 
         async function loadDevices() {
             let r = await fetch("/api/devices", {
-                headers: {
-                    "Authorization": "Bearer " + token
-                }
+                headers: { "Authorization": "Bearer " + token }
             });
             let j = await r.json();
             if (j.error) {
@@ -191,9 +200,32 @@
                 j.forEach(d => {
                     let li = document.createElement("li");
                     li.innerText = d.name + " (" + d.imei + ")";
-                    li.onclick = () => { alert("Selected: " + d.name + " / IMEI: " + d.imei); };
+                    li.onclick = () => { selectDevice(d); };
                     list.appendChild(li);
                 });
+            }
+        }
+
+        async function selectDevice(device) {
+            let r = await fetch("/api/positions/last?imei=" + device.imei, {
+                headers: { "Authorization": "Bearer " + token }
+            });
+            let j = await r.json();
+            if (j.error) {
+                alert(j.error);
+            } else {
+                if (!j.lat || !j.lon) {
+                    alert("No position data for this device yet");
+                    return;
+                }
+                if (markers[device.imei]) {
+                    map.removeLayer(markers[device.imei]);
+                }
+                let m = L.marker([j.lat, j.lon]).addTo(map);
+                map.setView([j.lat, j.lon], 15);
+                markers[device.imei] = m;
+                infoDiv.innerHTML = "<b>" + device.name + "</b><br>IMEI: " + device.imei
+                    + "<br>Last Time: " + j.time;
             }
         }
 
@@ -224,6 +256,20 @@
         }
 
         loadDevices();
+
+        setInterval(async () => {
+            let r = await fetch("/api/positions/live", {
+                headers: { "Authorization": "Bearer " + token }
+            });
+            let data = await r.json();
+            if (!data.error) {
+                data.forEach(pos => {
+                    if (markers[pos.imei]) {
+                        markers[pos.imei].setLatLng([pos.lat, pos.lon]);
+                    }
+                });
+            }
+        }, 5000);
     </script>
 </body>
 

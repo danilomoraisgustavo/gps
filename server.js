@@ -21,8 +21,17 @@ const pool = new Pool({
 
 async function initDB() {
     await pool.query("create table if not exists gps_users(id serial primary key, username text unique, password text, created_at timestamp default now())");
-    await pool.query("create table if not exists gps_positions(id serial primary key, device_id text, frame_type int, raw_data text, created_at timestamp default now())");
     await pool.query("create table if not exists gps_devices(id serial primary key, user_id int, name text, imei text unique, created_at timestamp default now())");
+    await pool.query(`create table if not exists gps_positions(
+        id serial primary key,
+        device_id text,
+        frame_type int,
+        raw_data text,
+        lat double precision,
+        lon double precision,
+        time_stamp timestamp,
+        created_at timestamp default now()
+    )`);
 }
 initDB();
 
@@ -104,7 +113,33 @@ app.get("/api/devices", auth, async (req, res) => {
     }
 });
 
-app.listen(2000);
+app.get("/api/positions/last", auth, async (req, res) => {
+    let imei = req.query.imei;
+    if (!imei) return res.json({ error: "No IMEI" });
+    try {
+        let result = await pool.query("select * from gps_positions where device_id=$1 and lat is not null and lon is not null order by time_stamp desc limit 1", [imei]);
+        if (result.rowCount === 0) return res.json({});
+        let row = result.rows[0];
+        res.json({
+            lat: row.lat,
+            lon: row.lon,
+            time: row.time_stamp
+        });
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+app.get("/api/positions/live", auth, async (req, res) => {
+    try {
+        let result = await pool.query("select device_id as imei, lat, lon from (select device_id, lat, lon, row_number() over (partition by device_id order by time_stamp desc) as rn from gps_positions where lat is not null and lon is not null) t where rn=1");
+        res.json(result.rows);
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+app.listen(4000);
 
 function crc16X25(buf) {
     let crc = 0xffff;
@@ -152,7 +187,7 @@ function encodeCommand(gt06Password, content, language) {
 
 function decodeFrame(buffer) {
     if (buffer.length < 5) return null;
-    let start = buffer[0] === 0x78 && buffer[1] === 0x78 ? 2 : (buffer[0] === 0x79 && buffer[1] === 0x79 ? 4 : 0);
+    let start = (buffer[0] === 0x78 && buffer[1] === 0x78) ? 2 : ((buffer[0] === 0x79 && buffer[1] === 0x79) ? 4 : 0);
     if (!start) return null;
     let length;
     if (start === 2) {
@@ -178,9 +213,7 @@ function decodeFrame(buffer) {
 function respond(socket, frame, type, content, extended) {
     if (!socket.destroyed) {
         let head = extended ? 0x7979 : 0x7878;
-        let length = extended
-            ? 2 + 1 + (content ? content.length : 0) + 2 + 2
-            : 1 + (content ? content.length : 0) + 2 + 2;
+        let length = extended ? (2 + 1 + (content ? content.length : 0) + 2 + 2) : (1 + (content ? content.length : 0) + 2 + 2);
         let answer = Buffer.alloc(extended ? length + 4 : length + 4);
         answer[0] = head >> 8;
         answer[1] = head & 0xff;
@@ -215,23 +248,35 @@ function respond(socket, frame, type, content, extended) {
     }
 }
 
-async function insertData(deviceId, frameType, rawData) {
-    await pool.query("insert into gps_positions(device_id, frame_type, raw_data) values($1, $2, $3)", [
-        deviceId,
-        frameType,
-        rawData
+async function insertData(deviceId, frameType, rawData, lat, lon, time_stamp) {
+    await pool.query("insert into gps_positions(device_id, frame_type, raw_data, lat, lon, time_stamp) values($1,$2,$3,$4,$5,$6)", [
+        deviceId, frameType, rawData, lat, lon, time_stamp
     ]);
+}
+
+function decodeGps(content) {
+    if (content.length < 12) return null;
+    let y = content[0];
+    let m = content[1];
+    let d = content[2];
+    let hh = content[3];
+    let mm = content[4];
+    let ss = content[5];
+    let dateStr = `20${y.toString().padStart(2, '0')}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')} ${hh.toString().padStart(2, '0')}:${mm.toString().padStart(2, '0')}:${ss.toString().padStart(2, '0')}`;
+    let latRaw = content.readUInt32BE(6) / (60 * 30000);
+    let lonRaw = content.readUInt32BE(10) / (60 * 30000);
+    // This is a simplified check. Real GT06 has flags
+    let lat = latRaw;
+    let lon = lonRaw;
+    return { lat, lon, time: dateStr };
 }
 
 let deviceSessions = {};
 let partialData = new WeakMap();
-let passwordMap = {};
-let modelMap = {};
-let languageMap = {};
-let alternativeMap = {};
 
 function decodeGt06(socket, frame) {
-    let start = frame[0] === 0x78 && frame[1] === 0x78 ? 2 : 4;
+    let start = (frame[0] === 0x78 && frame[1] === 0x78) ? 2 : 4;
+    let length = (start === 2) ? frame[2] : frame.readUInt16BE(2);
     let type = frame[start];
     let content = frame.subarray(start + 1, frame.length - 4);
     if (type === 0x01) {
@@ -240,36 +285,21 @@ function decodeGt06(socket, frame) {
         if (!imei) return;
         deviceSessions[socket.id] = imei;
         respond(socket, frame, type, Buffer.alloc(0), false);
-        insertData(imei, type, frame.toString("hex"));
-    } else if (type === 0x23) {
-        respond(socket, frame, type, Buffer.alloc(0), false);
-        let d = deviceSessions[socket.id] || "";
-        insertData(d, type, frame.toString("hex"));
-    } else if (type === 0x2a) {
-        let text = "NA&&NA&&0##";
-        let r = Buffer.alloc(text.length + 5);
-        r[0] = text.length;
-        r.writeUInt32BE(0, 1);
-        r.write(text, 5, "ascii");
-        respond(socket, frame, 0x97, r, true);
-        let dd = deviceSessions[socket.id] || "";
-        insertData(dd, type, frame.toString("hex"));
-    } else if (type === 0x8a) {
-        let dt = new Date();
-        let buf = Buffer.alloc(6);
-        buf[0] = dt.getUTCFullYear() - 2000;
-        buf[1] = dt.getUTCMonth() + 1;
-        buf[2] = dt.getUTCDate();
-        buf[3] = dt.getUTCHours();
-        buf[4] = dt.getUTCMinutes();
-        buf[5] = dt.getUTCSeconds();
-        respond(socket, frame, 0x8a, buf, false);
-        let dd = deviceSessions[socket.id] || "";
-        insertData(dd, type, frame.toString("hex"));
+        insertData(imei, type, frame.toString("hex"), null, null, new Date());
+    } else if (type === 0x10) {
+        let imei = deviceSessions[socket.id] || "";
+        let gps = decodeGps(content);
+        if (gps) {
+            respond(socket, frame, type, Buffer.alloc(0), false);
+            insertData(imei, type, frame.toString("hex"), gps.lat, gps.lon, gps.time);
+        } else {
+            respond(socket, frame, type, Buffer.alloc(0), false);
+            insertData(imei, type, frame.toString("hex"), null, null, new Date());
+        }
     } else {
         respond(socket, frame, type, Buffer.alloc(0), false);
-        let dd = deviceSessions[socket.id] || "";
-        insertData(dd, type, frame.toString("hex"));
+        let imei = deviceSessions[socket.id] || "";
+        insertData(imei, type, frame.toString("hex"), null, null, new Date());
     }
 }
 
@@ -325,15 +355,15 @@ function sendCommand(deviceId, cmdType, model, alternative, pass, lang, text) {
 module.exports = {
     server,
     sendCommand,
-    setDevicePassword: (id, pass) => { passwordMap[id] = pass; },
-    setDeviceModel: (id, model) => { modelMap[id] = model; },
-    setLanguage: (id, lang) => { languageMap[id] = lang; },
-    setAlternative: (id, alt) => { alternativeMap[id] = alt; },
+    setDevicePassword: (id, pass) => { },
+    setDeviceModel: (id, model) => { },
+    setLanguage: (id, lang) => { },
+    setAlternative: (id, alt) => { },
     sendToDevice: (id, cmdType, text) => {
-        let pass = passwordMap[id] || "123456";
-        let model = modelMap[id] || "";
-        let alt = alternativeMap[id] || false;
-        let lang = languageMap[id] || false;
-        return sendCommand(id, cmdType, model, alt, pass, lang, text || "");
+        let pass = "123456";
+        let model = "";
+        let alt = false;
+        let lng = false;
+        return sendCommand(id, cmdType, model, alt, pass, lng, text || "");
     }
 };
