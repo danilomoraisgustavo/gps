@@ -6,11 +6,21 @@
     <meta charset="utf-8">
     <title>PyDenTrack-GPS - Dashboard</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <!-- (Opcional) Se quiser usar um plugin para girar o ícone de acordo com a direção, descomente a linha abaixo:
+    <script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker@master/leaflet.rotatedMarker.js"></script>
+    -->
     <style>
-        body {
+        /* Reinício de estilos básicos */
+        * {
             margin: 0;
             padding: 0;
-            font-family: sans-serif;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
         }
 
         header {
@@ -25,12 +35,14 @@
 
         header .logo {
             font-weight: bold;
+            font-size: 1.2rem;
         }
 
         header .links a {
             color: #fff;
             margin-left: 15px;
             text-decoration: none;
+            font-size: 0.95rem;
         }
 
         .container {
@@ -40,20 +52,33 @@
 
         .sidebar {
             width: 250px;
-            background: #f2f2f2;
+            background: #fff;
+            border-right: 1px solid #ddd;
             padding: 10px;
             overflow-y: auto;
         }
 
         .sidebar h3 {
             margin-top: 0;
+            margin-bottom: 10px;
+            font-size: 1rem;
         }
 
         .sidebar button {
             width: 100%;
             padding: 8px;
             cursor: pointer;
+            background: #007bff;
+            color: #fff;
+            border: none;
+            outline: none;
+            font-size: 0.95rem;
             margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        .sidebar button:hover {
+            background: #0056b3;
         }
 
         .devices {
@@ -67,21 +92,33 @@
             align-items: center;
             justify-content: space-between;
             padding: 8px;
-            background: #fff;
+            background: #f9f9f9;
             margin-bottom: 5px;
-            border: 1px solid #ccc;
-            cursor: pointer;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+
+        .devices li:hover {
+            background: #f0f0f0;
         }
 
         .device-label {
             flex: 1;
             margin-right: 10px;
+            font-size: 0.95rem;
         }
 
         .device-actions button {
             margin-left: 4px;
             padding: 4px 6px;
             cursor: pointer;
+            font-size: 0.8rem;
+            border: none;
+            border-radius: 4px;
+        }
+
+        .device-actions button:hover {
+            opacity: 0.8;
         }
 
         #map {
@@ -106,35 +143,57 @@
             padding: 20px;
             min-width: 300px;
             border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
         }
 
         .modal h2 {
             margin-top: 0;
+            font-size: 1rem;
+            margin-bottom: 10px;
         }
 
         .modal input {
             width: 100%;
             margin-bottom: 10px;
             padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 0.95rem;
         }
 
         .modal button {
             padding: 8px 15px;
             cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.9rem;
         }
 
         .modal-actions {
             text-align: right;
         }
 
+        .modal-actions button {
+            margin-left: 5px;
+            background: #007bff;
+            color: #fff;
+        }
+
+        .modal-actions button:nth-child(1) {
+            background: #999;
+        }
+
         #info {
             position: absolute;
             top: 60px;
             right: 10px;
-            background: rgba(255, 255, 255, 0.8);
+            background: rgba(255, 255, 255, 0.9);
             padding: 10px;
             z-index: 999;
-            font-size: 14px;
+            font-size: 0.9rem;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            max-width: 220px;
         }
     </style>
 </head>
@@ -158,6 +217,7 @@
         <div id="info"></div>
     </div>
 
+    <!-- Modal de adicionar dispositivo -->
     <div class="modal-bg" id="addModal">
         <div class="modal">
             <h2>Add GT06 Device</h2>
@@ -170,6 +230,7 @@
         </div>
     </div>
 
+    <!-- Modal de editar dispositivo -->
     <div class="modal-bg" id="editModal">
         <div class="modal">
             <h2>Edit Device</h2>
@@ -181,11 +242,14 @@
         </div>
     </div>
 
+    <!-- Modal de comandos -->
     <div class="modal-bg" id="cmdModal">
         <div class="modal">
             <h2>Commands</h2>
-            <div id="cmdDeviceInfo"></div>
-            <button onclick="requestLocation()">Get Location</button>
+            <div id="cmdDeviceInfo" style="margin-bottom: 10px;"></div>
+            <button onclick="requestLocation()"
+                style="background: #28a745; color: #fff; border-radius:4px; padding:6px 12px; border:none;">Get
+                Location</button>
             <div class="modal-actions">
                 <button onclick="closeCmdModal()">Close</button>
             </div>
@@ -193,18 +257,32 @@
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- (Opcional) Plugin para girar o ícone se tiver "direction" ou "course" -->
+    <!-- <script src="https://cdn.jsdelivr.net/gh/bbecquet/Leaflet.RotatedMarker@master/leaflet.rotatedMarker.js"></script> -->
+
     <script>
         let token = localStorage.getItem("token");
         if (!token) {
             window.location = "/";
         }
+
+        // Cria o mapa Leaflet
         let map = L.map('map').setView([0, 0], 2);
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+        // Ícone personalizado para o rastreador (seta vermelha)
+        // Substitua 'arrow-red.png' pela imagem que você tiver (salva em 'public/img/arrow-red.png', por ex.)
+        let arrowIcon = L.icon({
+            iconUrl: '/img/arrow-red.png', // coloque sua imagem aqui
+            iconSize: [35, 35],            // tamanho do ícone
+            iconAnchor: [17, 17]          // onde fica o "centro" do ícone
+        });
+
         let markers = {};
         let infoDiv = document.getElementById("info");
-
         let selectedDevice = null;
 
+        // Funções de UI (logout, admin, tools etc.)
         async function logout() {
             localStorage.removeItem("token");
             window.location = "/";
@@ -218,10 +296,10 @@
             alert("Tools clicked");
         }
 
+        // Modais de adicionar / editar / comandos
         function showAddModal() {
             document.getElementById("addModal").style.display = "flex";
         }
-
         function closeAddModal() {
             document.getElementById("addModal").style.display = "none";
         }
@@ -231,33 +309,8 @@
             document.getElementById("editName").value = device.name;
             document.getElementById("editModal").style.display = "flex";
         }
-
         function closeEditModal() {
             document.getElementById("editModal").style.display = "none";
-        }
-
-        async function saveEdit() {
-            if (!selectedDevice) return;
-            let newName = document.getElementById("editName").value.trim();
-            if (!newName) {
-                alert("Please enter a name");
-                return;
-            }
-            let r = await fetch("/api/devices/" + selectedDevice.id, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": "Bearer " + token
-                },
-                body: JSON.stringify({ name: newName })
-            });
-            let j = await r.json();
-            if (j.error) {
-                alert(j.error);
-            } else {
-                closeEditModal();
-                loadDevices();
-            }
         }
 
         function showCmdModal(device) {
@@ -265,7 +318,6 @@
             document.getElementById("cmdDeviceInfo").innerText = "Device: " + device.name + " (IMEI: " + device.imei + ")";
             document.getElementById("cmdModal").style.display = "flex";
         }
-
         function closeCmdModal() {
             document.getElementById("cmdModal").style.display = "none";
         }
@@ -288,6 +340,7 @@
             else alert("Location command sent!");
         }
 
+        // Carrega lista de dispositivos
         async function loadDevices() {
             let r = await fetch("/api/devices", {
                 headers: { "Authorization": "Bearer " + token }
@@ -300,26 +353,32 @@
                 list.innerHTML = "";
                 j.forEach(d => {
                     let li = document.createElement("li");
+
                     let label = document.createElement("div");
                     label.className = "device-label";
                     label.innerText = d.name + " (" + d.imei + ")";
                     label.onclick = () => selectDevice(d);
+
                     let actions = document.createElement("div");
                     actions.className = "device-actions";
+
                     let editBtn = document.createElement("button");
                     editBtn.innerText = "✎";
                     editBtn.onclick = (e) => {
                         e.stopPropagation();
                         showEditModal(d);
                     };
+
                     let cmdBtn = document.createElement("button");
                     cmdBtn.innerText = "⚙";
                     cmdBtn.onclick = (e) => {
                         e.stopPropagation();
                         showCmdModal(d);
                     };
+
                     actions.appendChild(editBtn);
                     actions.appendChild(cmdBtn);
+
                     li.appendChild(label);
                     li.appendChild(actions);
                     list.appendChild(li);
@@ -327,6 +386,7 @@
             }
         }
 
+        // Selecionar um dispositivo e exibir no mapa
         async function selectDevice(device) {
             let r = await fetch("/api/positions/last?imei=" + device.imei, {
                 headers: { "Authorization": "Bearer " + token }
@@ -339,10 +399,23 @@
                     alert("No position data for this device yet");
                     return;
                 }
+                // Remove o marker antigo se existir
                 if (markers[device.imei]) {
                     map.removeLayer(markers[device.imei]);
                 }
-                let m = L.marker([j.lat, j.lon]).addTo(map);
+
+                // Cria o marker com nosso ícone personalizado
+                // Se quiser girar de acordo com "j.course" (direção), habilite plugin RotatedMarker e use rotate:
+                /*
+                    let m = L.marker([j.lat, j.lon], {
+                        icon: arrowIcon,
+                        rotationAngle: j.course || 0,
+                        rotationOrigin: 'center center'
+                    }).addTo(map);
+                */
+                // Caso não tenha curso/direção, apenas mostra o ícone:
+                let m = L.marker([j.lat, j.lon], { icon: arrowIcon }).addTo(map);
+
                 map.setView([j.lat, j.lon], 15);
                 markers[device.imei] = m;
                 infoDiv.innerHTML = "<b>" + device.name + "</b><br>IMEI: " + device.imei
@@ -350,6 +423,7 @@
             }
         }
 
+        // Adicionar novo dispositivo
         async function addDevice() {
             let name = document.getElementById("deviceName").value.trim();
             let imei = document.getElementById("deviceImei").value.trim();
@@ -376,8 +450,7 @@
             }
         }
 
-        loadDevices();
-
+        // Atualiza markers a cada 5 seg. (para posicionar no mapa)
         setInterval(async () => {
             let r = await fetch("/api/positions/live", {
                 headers: { "Authorization": "Bearer " + token }
@@ -387,10 +460,14 @@
                 data.forEach(pos => {
                     if (markers[pos.imei]) {
                         markers[pos.imei].setLatLng([pos.lat, pos.lon]);
+                        // Se tivesse 'pos.course', poderíamos atualizar a rotação:
+                        // markers[pos.imei].setRotationAngle(pos.course || 0);
                     }
                 });
             }
         }, 5000);
+
+        loadDevices();
     </script>
 </body>
 
