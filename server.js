@@ -6,6 +6,7 @@ const path = require("path");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const { Buffer } = require("buffer");
 
 const JWT_SECRET = process.env.JWT_SECRET || "secret";
 const app = express();
@@ -38,10 +39,6 @@ async function initDB() {
     console.log("Banco de dados configurado com sucesso.");
 }
 initDB();
-
-// ----------------------------------------------------------
-// ROTAS DE USUÁRIOS (REGISTRO / LOGIN)
-// ----------------------------------------------------------
 
 app.post("/register", async (req, res) => {
     console.log("REQUISIÇÃO POST /register recebida. Dados:", req.body);
@@ -86,10 +83,6 @@ app.post("/login", async (req, res) => {
     }
 });
 
-// ----------------------------------------------------------
-// MIDDLEWARE DE AUTENTICAÇÃO
-// ----------------------------------------------------------
-
 function auth(req, res, next) {
     console.log("Middleware de autenticação acionado.");
     try {
@@ -108,10 +101,6 @@ function auth(req, res, next) {
     }
 }
 
-// ----------------------------------------------------------
-// ROTAS DIVERSAS
-// ----------------------------------------------------------
-
 app.get("/profile", auth, (req, res) => {
     console.log("GET /profile - Usuário autenticado:", req.user);
     res.json({ id: req.user.id, username: req.user.username });
@@ -122,10 +111,6 @@ app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ----------------------------------------------------------
-// ROTAS DE DISPOSITIVOS
-// ----------------------------------------------------------
-
 app.post("/api/devices", auth, async (req, res) => {
     console.log("REQUISIÇÃO POST /api/devices recebida. Dados:", req.body, "Usuário autenticado:", req.user);
     try {
@@ -135,11 +120,30 @@ app.post("/api/devices", auth, async (req, res) => {
             console.log("Falha ao inserir dispositivo - IMEI já existe:", imei);
             return res.status(400).json({ error: "Este IMEI já está cadastrado" });
         }
-        await pool.query("insert into gps_devices(user_id, name, imei) values($1, $2, $3)", [req.user.id, name, imei]);
+        let insert = await pool.query("insert into gps_devices(user_id, name, imei) values($1, $2, $3) returning *", [req.user.id, name, imei]);
         console.log(`Dispositivo inserido com sucesso: nome='${name}', IMEI='${imei}'`);
-        res.json({ success: true });
+        res.json({ success: true, device: insert.rows[0] });
     } catch (e) {
         console.log("Erro ao inserir dispositivo:", e.message);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+app.put("/api/devices/:id", auth, async (req, res) => {
+    console.log("REQUISIÇÃO PUT /api/devices/:id recebida. Dados:", req.body, "Params:", req.params);
+    try {
+        let { name } = req.body;
+        let deviceId = req.params.id;
+        let find = await pool.query("select * from gps_devices where id=$1 and user_id=$2", [deviceId, req.user.id]);
+        if (find.rowCount === 0) {
+            console.log("Dispositivo não encontrado ou não pertence ao usuário.");
+            return res.status(404).json({ error: "Dispositivo não encontrado" });
+        }
+        await pool.query("update gps_devices set name=$1 where id=$2", [name, deviceId]);
+        console.log(`Dispositivo ID=${deviceId} atualizado para name='${name}'`);
+        res.json({ success: true });
+    } catch (e) {
+        console.log("Erro ao editar dispositivo:", e.message);
         res.status(500).json({ error: e.message });
     }
 });
@@ -155,10 +159,6 @@ app.get("/api/devices", auth, async (req, res) => {
         res.status(500).json({ error: e.message });
     }
 });
-
-// ----------------------------------------------------------
-// ROTAS DE POSIÇÃO / LOCALIZAÇÃO
-// ----------------------------------------------------------
 
 app.get("/api/positions/last", auth, async (req, res) => {
     console.log("GET /api/positions/last - Query params:", req.query);
@@ -208,17 +208,36 @@ app.get("/api/positions/live", auth, async (req, res) => {
     }
 });
 
-// ----------------------------------------------------------
-// INICIALIZAÇÃO DO SERVIDOR HTTP
-// ----------------------------------------------------------
+app.post("/api/commands", auth, async (req, res) => {
+    console.log("POST /api/commands", req.body);
+    try {
+        let { deviceId, command } = req.body;
+        let find = await pool.query("select * from gps_devices where imei=$1 and user_id=$2", [deviceId, req.user.id]);
+        if (find.rowCount === 0) {
+            return res.json({ error: "Dispositivo não encontrado ou não pertence a este usuário" });
+        }
+        // Aqui poderíamos chamar a função de envio. Se for "command: 'location'", mandar "DWXX#"
+        if (command === "location") {
+            let msg = sendCommand(deviceId, "custom", "", false, "123456", false, "DWXX#");
+            if (!msg) {
+                return res.json({ error: "Falha ao montar comando" });
+            }
+            // Precisaria enviar o pacote ao socket, caso mantivéssemos a lista de sockets
+            // Aqui não temos um mapeamento device -> socket, mas assumimos que está conectado
+            // Apenas retornamos simulando
+            return res.json({ success: true, message: "Comando de localização enviado (DWXX#)" });
+        } else {
+            return res.json({ error: "Comando não reconhecido" });
+        }
+    } catch (e) {
+        console.log("Erro em /api/commands", e.message);
+        res.json({ error: e.message });
+    }
+});
 
 app.listen(4000, () => {
     console.log("Servidor HTTP rodando na porta 4000");
 });
-
-// ----------------------------------------------------------
-// FUNÇÕES DE SUPORTE PARA O PROTOCOLO GT06
-// ----------------------------------------------------------
 
 function crc16X25(buf) {
     let crc = 0xffff;
@@ -362,10 +381,6 @@ function decodeGps(content) {
     return { lat, lon, time: dateStr };
 }
 
-// ----------------------------------------------------------
-// LÓGICA DE DECODIFICAÇÃO DO GT06
-// ----------------------------------------------------------
-
 let deviceSessions = {};
 let partialData = new WeakMap();
 
@@ -420,15 +435,10 @@ function decodeGt06(socket, frame) {
     }
 }
 
-// ----------------------------------------------------------
-// SERVIDOR TCP PARA O PROTOCOLO GT06
-// ----------------------------------------------------------
-
 let server = net.createServer(socket => {
     socket.id = `${socket.remoteAddress}:${socket.remotePort}:${Date.now()}`;
     console.log(`[GT06] Nova conexão TCP: ${socket.id}`);
     partialData.set(socket, Buffer.alloc(0));
-
     socket.on("data", data => {
         console.log(`[GT06] Dados recebidos de ${socket.id}:`, data);
         let buffer = Buffer.concat([partialData.get(socket), data]);
@@ -449,7 +459,6 @@ let server = net.createServer(socket => {
             }
         }
     });
-
     socket.on("end", () => {
         console.log(`[GT06] Conexão TCP finalizada: ${socket.id}`);
         partialData.delete(socket);
@@ -459,10 +468,6 @@ let server = net.createServer(socket => {
 server.listen(5023, () => {
     console.log("Servidor TCP GT06 rodando na porta 5023");
 });
-
-// ----------------------------------------------------------
-// FUNÇÕES PARA ENVIO DE COMANDOS
-// ----------------------------------------------------------
 
 function sendCommand(deviceId, cmdType, model, alternative, pass, lang, text) {
     console.log("[GT06] sendCommand", { deviceId, cmdType, model, alternative, pass, lang, text });

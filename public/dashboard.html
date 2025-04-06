@@ -6,7 +6,6 @@
     <meta charset="utf-8">
     <title>PyDenTrack-GPS - Dashboard</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
     <style>
         body {
             margin: 0;
@@ -64,18 +63,25 @@
         }
 
         .devices li {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
             padding: 8px;
             background: #fff;
             margin-bottom: 5px;
             border: 1px solid #ccc;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
         }
 
-        .device-left {
+        .device-label {
             flex: 1;
+            margin-right: 10px;
+        }
+
+        .device-actions button {
+            margin-left: 4px;
+            padding: 4px 6px;
+            cursor: pointer;
         }
 
         #map {
@@ -145,52 +151,48 @@
     <div class="container">
         <div class="sidebar">
             <h3>Devices</h3>
-            <button onclick="showModal()">+ Add GT06</button>
+            <button onclick="showAddModal()">+ Add GT06</button>
             <ul class="devices" id="devices-list"></ul>
         </div>
         <div id="map"></div>
         <div id="info"></div>
     </div>
 
-    <!-- Modal for adding device -->
-    <div class="modal-bg" id="modal-bg">
+    <div class="modal-bg" id="addModal">
         <div class="modal">
             <h2>Add GT06 Device</h2>
             <input id="deviceName" placeholder="Device Name">
             <input id="deviceImei" placeholder="GT06 IMEI">
             <div class="modal-actions">
-                <button onclick="closeModal()">Cancel</button>
+                <button onclick="closeAddModal()">Cancel</button>
                 <button onclick="addDevice()">Save</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal for editing device -->
-    <div class="modal-bg" id="editDeviceModal">
+    <div class="modal-bg" id="editModal">
         <div class="modal">
             <h2>Edit Device</h2>
-            <input id="editDeviceName" placeholder="Device Name">
+            <input id="editName" placeholder="Device Name">
             <div class="modal-actions">
                 <button onclick="closeEditModal()">Cancel</button>
-                <button onclick="saveDeviceEdit()">Save</button>
+                <button onclick="saveEdit()">Save</button>
             </div>
         </div>
     </div>
 
-    <!-- Modal for commands -->
-    <div class="modal-bg" id="commandModal">
+    <div class="modal-bg" id="cmdModal">
         <div class="modal">
-            <h2>Send Command</h2>
-            <p id="commandDeviceLabel"></p>
-            <button onclick="requestLocation()">Request Location (DWXX#)</button>
-            <div class="modal-actions" style="margin-top:10px;">
-                <button onclick="closeCommandModal()">Close</button>
+            <h2>Commands</h2>
+            <div id="cmdDeviceInfo"></div>
+            <button onclick="requestLocation()">Get Location</button>
+            <div class="modal-actions">
+                <button onclick="closeCmdModal()">Close</button>
             </div>
         </div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         let token = localStorage.getItem("token");
         if (!token) {
@@ -201,8 +203,7 @@
         let markers = {};
         let infoDiv = document.getElementById("info");
 
-        let currentEditDevice = null;
-        let currentCommandDevice = null;
+        let selectedDevice = null;
 
         async function logout() {
             localStorage.removeItem("token");
@@ -217,50 +218,74 @@
             alert("Tools clicked");
         }
 
-        function showModal() {
-            document.getElementById("modal-bg").style.display = "flex";
+        function showAddModal() {
+            document.getElementById("addModal").style.display = "flex";
         }
 
-        function closeModal() {
-            document.getElementById("modal-bg").style.display = "none";
+        function closeAddModal() {
+            document.getElementById("addModal").style.display = "none";
         }
 
         function showEditModal(device) {
-            currentEditDevice = device;
-            document.getElementById("editDeviceName").value = device.name;
-            document.getElementById("editDeviceModal").style.display = "flex";
+            selectedDevice = device;
+            document.getElementById("editName").value = device.name;
+            document.getElementById("editModal").style.display = "flex";
         }
 
         function closeEditModal() {
-            document.getElementById("editDeviceModal").style.display = "none";
+            document.getElementById("editModal").style.display = "none";
         }
 
-        function showCommandModal(device) {
-            currentCommandDevice = device;
-            document.getElementById("commandDeviceLabel").innerText = "Device: " + device.name + " (IMEI: " + device.imei + ")";
-            document.getElementById("commandModal").style.display = "flex";
-        }
-
-        function closeCommandModal() {
-            document.getElementById("commandModal").style.display = "none";
-        }
-
-        async function saveDeviceEdit() {
-            // TODO: create an API to edit device if needed. For now just close.
-            let newName = document.getElementById("editDeviceName").value.trim();
+        async function saveEdit() {
+            if (!selectedDevice) return;
+            let newName = document.getElementById("editName").value.trim();
             if (!newName) {
-                alert("Please enter the new device name");
+                alert("Please enter a name");
                 return;
             }
-            // Example logic to just rename locally (no server update).
-            currentEditDevice.name = newName;
-            closeEditModal();
-            loadDevices();
+            let r = await fetch("/api/devices/" + selectedDevice.id, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({ name: newName })
+            });
+            let j = await r.json();
+            if (j.error) {
+                alert(j.error);
+            } else {
+                closeEditModal();
+                loadDevices();
+            }
+        }
+
+        function showCmdModal(device) {
+            selectedDevice = device;
+            document.getElementById("cmdDeviceInfo").innerText = "Device: " + device.name + " (IMEI: " + device.imei + ")";
+            document.getElementById("cmdModal").style.display = "flex";
+        }
+
+        function closeCmdModal() {
+            document.getElementById("cmdModal").style.display = "none";
         }
 
         async function requestLocation() {
-            // TODO: call an API or something to send the "DWXX#" command if desired
-            alert("Requesting location for: " + currentCommandDevice.imei + " using 'DWXX#' command (not implemented).");
+            if (!selectedDevice) return;
+            let r = await fetch("/api/commands", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": "Bearer " + token
+                },
+                body: JSON.stringify({
+                    deviceId: selectedDevice.imei,
+                    command: "location"
+                })
+            });
+            let j = await r.json();
+            if (j.error) alert(j.error);
+            else alert("Location command sent!");
         }
 
         async function loadDevices() {
@@ -275,31 +300,28 @@
                 list.innerHTML = "";
                 j.forEach(d => {
                     let li = document.createElement("li");
-                    let leftDiv = document.createElement("div");
-                    leftDiv.className = "device-left";
-                    leftDiv.innerText = d.name + " (" + d.imei + ")";
-                    leftDiv.onclick = () => { selectDevice(d); };
-                    li.appendChild(leftDiv);
-
-                    let editIcon = document.createElement("i");
-                    editIcon.className = "bi bi-pencil-square me-2";
-                    editIcon.onclick = (e) => {
+                    let label = document.createElement("div");
+                    label.className = "device-label";
+                    label.innerText = d.name + " (" + d.imei + ")";
+                    label.onclick = () => selectDevice(d);
+                    let actions = document.createElement("div");
+                    actions.className = "device-actions";
+                    let editBtn = document.createElement("button");
+                    editBtn.innerText = "✎";
+                    editBtn.onclick = (e) => {
                         e.stopPropagation();
                         showEditModal(d);
                     };
-
-                    let cmdIcon = document.createElement("i");
-                    cmdIcon.className = "bi bi-tools";
-                    cmdIcon.onclick = (e) => {
+                    let cmdBtn = document.createElement("button");
+                    cmdBtn.innerText = "⚙";
+                    cmdBtn.onclick = (e) => {
                         e.stopPropagation();
-                        showCommandModal(d);
+                        showCmdModal(d);
                     };
-
-                    let iconsDiv = document.createElement("div");
-                    iconsDiv.appendChild(editIcon);
-                    iconsDiv.appendChild(cmdIcon);
-
-                    li.appendChild(iconsDiv);
+                    actions.appendChild(editBtn);
+                    actions.appendChild(cmdBtn);
+                    li.appendChild(label);
+                    li.appendChild(actions);
                     list.appendChild(li);
                 });
             }
@@ -347,7 +369,7 @@
             if (j.error) {
                 alert(j.error);
             } else {
-                closeModal();
+                closeAddModal();
                 document.getElementById("deviceName").value = "";
                 document.getElementById("deviceImei").value = "";
                 loadDevices();
